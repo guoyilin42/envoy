@@ -22,6 +22,7 @@ envoy_cc_library(
         "//source/common/protobuf",
         "//source/extensions/filters/common/mcp:constants_lib",
         "//source/extensions/filters/http/common:pass_through_filter_lib",
+        "//source/extensions/filters/http/mcp:mcp_json_parser_lib",
         "@envoy_api//envoy/extensions/filters/http/mcp_json_rest_bridge/v3:pkg_cc_proto",
         "@nlohmann_json//:json",
     ],

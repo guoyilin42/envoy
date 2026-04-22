@@ -2,8 +2,9 @@
 
 #include "envoy/extensions/filters/http/mcp_json_rest_bridge/v3/mcp_json_rest_bridge.pb.h"
 
+#include "source/common/protobuf/protobuf.h" // IWYU pragma: keep
+
 #include "absl/container/flat_hash_set.h"
-#include "nlohmann/json.hpp" // IWYU pragma: keep
 
 namespace Envoy {
 namespace Extensions {
@@ -18,19 +19,19 @@ inline constexpr absl::string_view ReservedChars = R"( !"#$%&'()*+,:;<=>?@[\]^`{
 struct HttpRequest {
   std::string url;
   std::string method;
-  nlohmann::json body;
+  std::string body;
 };
 
 // Builds an HttpRequest from `http_rule` and `arguments` from the JSON-RPC request body.
 absl::StatusOr<HttpRequest> buildHttpRequest(
     const envoy::extensions::filters::http::mcp_json_rest_bridge::v3::HttpRule& http_rule,
-    const nlohmann::json& arguments);
+    const Protobuf::Value& arguments);
 
 // Constructs a base URL by replacing template variables with values from the arguments.
 // Exposed for testing.
 absl::StatusOr<std::string> constructBaseUrl(absl::string_view pattern,
                                              const absl::flat_hash_set<std::string>& templates,
-                                             const nlohmann::json& arguments);
+                                             const Protobuf::Value& arguments);
 
 } // namespace McpJsonRestBridge
 } // namespace HttpFilters

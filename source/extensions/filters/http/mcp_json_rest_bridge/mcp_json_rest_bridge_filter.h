@@ -12,11 +12,11 @@
 #include "source/common/buffer/buffer_impl.h"
 #include "source/common/common/logger.h"
 #include "source/extensions/filters/http/common/pass_through_filter.h"
+#include "source/extensions/filters/http/mcp/mcp_json_parser.h"
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
-#include "absl/types/optional.h"
 #include "nlohmann/json.hpp" // IWYU pragma: keep
 
 namespace Envoy {
@@ -39,6 +39,9 @@ public:
   getToolsListHttpRule() const;
 
   const std::string& fallbackProtocolVersion() const { return fallback_protocol_version_; }
+  const Envoy::Extensions::HttpFilters::Mcp::McpParserConfig& parserConfig() const {
+    return parser_config_;
+  }
 
 private:
   absl::flat_hash_map<std::string,
@@ -46,6 +49,7 @@ private:
       tool_to_http_rule_;
   envoy::extensions::filters::http::mcp_json_rest_bridge::v3::McpJsonRestBridge proto_config_;
   std::string fallback_protocol_version_;
+  Envoy::Extensions::HttpFilters::Mcp::McpParserConfig parser_config_;
 };
 
 using McpJsonRestBridgeFilterConfigSharedPtr = std::shared_ptr<McpJsonRestBridgeFilterConfig>;
@@ -70,14 +74,13 @@ public:
 
 private:
   // Handles "method" field in the MCP request.
-  void handleMcpMethod(const nlohmann::json& json_rpc,
-                       Http::RequestHeaderMapOptRef request_headers);
+  void handleMcpMethod(Http::RequestHeaderMapOptRef request_headers);
 
   // Modifies the response from upstream into JSON-RPC response.
   void encodeJsonRpcData(Http::ResponseHeaderMapOptRef response_headers);
 
   // Maps the tool call request to the backend API.
-  void mapMcpToolToApiBackend(const nlohmann::json& json_rpc);
+  void mapMcpToolToApiBackend();
 
   // Sends MCP error response.
   void sendErrorResponse(Http::Code response_code, absl::string_view response_code_details,
@@ -86,7 +89,7 @@ private:
   // Validates the "id" and "method" fields of a JSON-RPC request.
   // It sends local error response and return an error status if the validation
   // fails. Otherwise, it returns OK status.
-  absl::Status validateJsonRpcIdAndMethod(const nlohmann::json& json_rpc);
+  absl::Status validateJsonRpcIdAndMethod();
 
   enum class McpOperation {
     Unspecified = 0,
@@ -104,14 +107,14 @@ private:
     OperationFailed = 6,
   };
   McpOperation mcp_operation_ = McpOperation::Unspecified;
-  absl::optional<nlohmann::json> session_id_;
+  nlohmann::json session_id_;
   std::string server_name_;
-  Buffer::OwnedImpl request_body_;
   std::string request_body_str_;
   Buffer::OwnedImpl response_body_;
   std::string response_body_str_;
 
   McpJsonRestBridgeFilterConfigSharedPtr config_;
+  std::unique_ptr<Envoy::Extensions::HttpFilters::Mcp::McpJsonParser> parser_;
 };
 
 } // namespace McpJsonRestBridge
