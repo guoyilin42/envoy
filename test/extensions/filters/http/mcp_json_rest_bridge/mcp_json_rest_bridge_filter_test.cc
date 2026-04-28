@@ -177,7 +177,7 @@ TEST_F(McpJsonRestBridgeFilterTest, MissingMethodFieldReturnsError) {
   EXPECT_EQ(
       nlohmann::json::parse(response_body.toString()),
       nlohmann::json::parse(
-          R"json({"error":{"code":-32601,"message":"Missing method field"},"id":0,"jsonrpc":"2.0"})json"));
+          R"json({"error":{"code":-32601,"message":"Missing method field"},"id":null,"jsonrpc":"2.0"})json"));
 }
 
 TEST_F(McpJsonRestBridgeFilterTest, UnsupportedMethodReturnsError) {
@@ -219,11 +219,10 @@ TEST_F(McpJsonRestBridgeFilterTest, NonStringMethodReturnsError) {
   EXPECT_EQ(filter_->decodeHeaders(request_headers_, /*end_stream=*/false),
             Http::FilterHeadersStatus::StopIteration);
 
-  EXPECT_CALL(
-      decoder_callbacks_,
-      sendLocalReply(Eq(Http::Code::BadRequest),
-                     StrEq(R"json({"code":-32601,"message":"Method field is not a string"})json"),
-                     _, _, StrEq("mcp_json_rest_bridge_filter_method_not_string")));
+  EXPECT_CALL(decoder_callbacks_,
+              sendLocalReply(Eq(Http::Code::BadRequest),
+                             StrEq(R"json({"code":-32601,"message":"Missing method field"})json"),
+                             _, _, StrEq("mcp_json_rest_bridge_filter_method_not_found")));
 
   Buffer::OwnedImpl body(R"json({"jsonrpc":"2.0","id":0,"method":123})json");
   EXPECT_EQ(filter_->decodeData(body, /*end_stream=*/true),
@@ -233,8 +232,7 @@ TEST_F(McpJsonRestBridgeFilterTest, NonStringMethodReturnsError) {
   response_headers_ = {{"content-type", "text/plain"}, {"content-length", "123456"}};
   EXPECT_EQ(filter_->encodeHeaders(response_headers_, /*end_stream=*/false),
             Http::FilterHeadersStatus::StopIteration);
-  Buffer::OwnedImpl response_body(
-      R"json({"code":-32601,"message":"Method field is not a string"})json");
+  Buffer::OwnedImpl response_body(R"json({"code":-32601,"message":"Missing method field"})json");
   EXPECT_EQ(filter_->encodeData(response_body, /*end_stream=*/true),
             Http::FilterDataStatus::Continue);
   EXPECT_THAT(response_headers_.getContentTypeValue(), StrEq("application/json"));
@@ -243,7 +241,7 @@ TEST_F(McpJsonRestBridgeFilterTest, NonStringMethodReturnsError) {
   EXPECT_EQ(
       nlohmann::json::parse(response_body.toString()),
       nlohmann::json::parse(
-          R"json({"error":{"code":-32601,"message":"Method field is not a string"},"id":0,"jsonrpc":"2.0"})json"));
+          R"json({"error":{"code":-32601,"message":"Missing method field"},"id":null,"jsonrpc":"2.0"})json"));
 }
 
 TEST_F(McpJsonRestBridgeFilterTest, MissingIdFieldReturnsError) {
@@ -747,7 +745,7 @@ TEST_F(McpJsonRestBridgeFilterTest, ToolListRewritePathForRequestAndTranslateRes
   // Assumes the request body is split into different parts.
   Buffer::OwnedImpl request_first_body(R"json({"jsonrpc":"2.0")json");
   EXPECT_EQ(filter_->decodeData(request_first_body, /*end_stream=*/false),
-            Http::FilterDataStatus::StopIterationNoBuffer);
+            Http::FilterDataStatus::StopIterationAndWatermark);
   Buffer::OwnedImpl request_second_body(R"json(,"id":12,"method":"tools/list"})json");
   EXPECT_EQ(filter_->decodeData(request_second_body, /*end_stream=*/true),
             Http::FilterDataStatus::Continue);

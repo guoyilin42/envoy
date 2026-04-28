@@ -1,8 +1,11 @@
 #include "source/extensions/filters/http/mcp_json_rest_bridge/http_request_builder.h"
 
 #include "test/test_common/status_utility.h"
+#include "test/test_common/utility.h"
 
+#include "absl/strings/str_split.h"
 #include "gtest/gtest.h"
+#include "nlohmann/json.hpp" // IWYU pragma: keep
 #include "ocpdiag/core/testing/parse_text_proto.h"
 
 namespace Envoy {
@@ -24,7 +27,7 @@ TEST(HttpRequestBuilderTest, WildCardHttpRuleBodyContainsAllArgumentsNotInPath) 
     body: "*"
   )pb");
 
-  json arguments = json::parse(R"json({
+  std::string json_str = R"json({
     "shelf": {
       "name": "science-fiction",
       "code": 3,
@@ -38,14 +41,17 @@ TEST(HttpRequestBuilderTest, WildCardHttpRuleBodyContainsAllArgumentsNotInPath) 
     },
     "parent": "projects/123456789",
     "theme": "Kids"
-  })json");
+  })json";
+
+  Protobuf::Value arguments;
+  TestUtility::loadFromJson(json_str, arguments);
 
   absl::StatusOr<HttpRequest> http_request = buildHttpRequest(http_rule, arguments);
   ASSERT_TRUE(http_request.ok());
 
   EXPECT_THAT(http_request->url, StrEq("/v1/projects/123456789"));
   EXPECT_THAT(http_request->method, StrEq("GET"));
-  EXPECT_EQ(http_request->body, json::parse(R"json({
+  EXPECT_EQ(json::parse(http_request->body), json::parse(R"json({
               "shelf": {
                 "name": "science-fiction",
                 "code": 3,
@@ -68,7 +74,7 @@ TEST(HttpRequestBuilderTest, ExtractHttpRuleBody) {
     body: "shelf"
   )pb");
 
-  json arguments = json::parse(R"json({
+  std::string json_str = R"json({
     "shelf": {
       "name": "science-fiction",
       "code": 3,
@@ -82,14 +88,17 @@ TEST(HttpRequestBuilderTest, ExtractHttpRuleBody) {
     },
     "parent": "projects/123456789",
     "theme": "Kids"
-  })json");
+  })json";
+
+  Protobuf::Value arguments;
+  TestUtility::loadFromJson(json_str, arguments);
 
   absl::StatusOr<HttpRequest> http_request = buildHttpRequest(http_rule, arguments);
   ASSERT_TRUE(http_request.ok());
 
   EXPECT_THAT(http_request->url, StrEq("/v1/projects/123456789?theme=Kids"));
   EXPECT_THAT(http_request->method, StrEq("POST"));
-  EXPECT_EQ(http_request->body, json::parse(R"json({
+  EXPECT_EQ(json::parse(http_request->body), json::parse(R"json({
               "name": "science-fiction",
               "code": 3,
               "content": "Some random content",
@@ -107,13 +116,16 @@ TEST(HttpRequestBuilderTest, PrimitiveArrayInQueryParameters) {
       R"pb(
     put: "/v1/{parent=projects/*}/shelves/{shelf.name}"
   )pb");
-  json arguments = json::parse(R"json({
+  std::string json_str = R"json({
     "shelf": {
       "name": "science-fiction",
       "editions": ["kindle", "hardback", "audobook"]
     },
     "parent": "projects/123456789"
-  })json");
+  })json";
+
+  Protobuf::Value arguments;
+  TestUtility::loadFromJson(json_str, arguments);
 
   absl::StatusOr<HttpRequest> http_request = buildHttpRequest(http_rule, arguments);
   ASSERT_TRUE(http_request.ok());
@@ -124,7 +136,7 @@ TEST(HttpRequestBuilderTest, PrimitiveArrayInQueryParameters) {
           "/v1/projects/123456789/shelves/"
           "science-fiction?shelf.editions=kindle&shelf.editions=hardback&shelf.editions=audobook"));
   EXPECT_THAT(http_request->method, StrEq("PUT"));
-  EXPECT_TRUE(http_request->body.is_null());
+  EXPECT_TRUE(http_request->body.empty());
 }
 
 TEST(HttpRequestBuilderTest, ObjectArrayInQueryParameters) {
@@ -132,7 +144,7 @@ TEST(HttpRequestBuilderTest, ObjectArrayInQueryParameters) {
       R"pb(
     patch: "/v1/{parent=projects/*}/shelves/{shelf.name}"
   )pb");
-  json arguments = json::parse(R"json({
+  std::string json_str = R"json({
     "shelf": {
       "name": "science-fiction",
       "authors": [
@@ -141,7 +153,10 @@ TEST(HttpRequestBuilderTest, ObjectArrayInQueryParameters) {
       ]
     },
     "parent": "projects/123456789"
-  })json");
+  })json";
+
+  Protobuf::Value arguments;
+  TestUtility::loadFromJson(json_str, arguments);
 
   absl::StatusOr<HttpRequest> http_request = buildHttpRequest(http_rule, arguments);
   ASSERT_TRUE(http_request.ok());
@@ -150,7 +165,7 @@ TEST(HttpRequestBuilderTest, ObjectArrayInQueryParameters) {
               StrEq("/v1/projects/123456789/shelves/"
                     "science-fiction?shelf.authors.name=author1&shelf.authors.name=author2"));
   EXPECT_THAT(http_request->method, StrEq("PATCH"));
-  EXPECT_TRUE(http_request->body.is_null());
+  EXPECT_TRUE(http_request->body.empty());
 }
 
 TEST(HttpRequestBuilderTest, PrimitiveTypeInQueryParameters) {
@@ -158,22 +173,31 @@ TEST(HttpRequestBuilderTest, PrimitiveTypeInQueryParameters) {
       R"pb(
     delete: "/v1/{parent=projects/*}"
   )pb");
-  json arguments = json::parse(R"json({
+  std::string json_str = R"json({
     "integer": 123,
     "float": 123.456,
     "boolean": true,
     "null": null,
     "string": "test string",
     "parent": "projects/123456789"
-  })json");
+  })json";
+
+  Protobuf::Value arguments;
+  TestUtility::loadFromJson(json_str, arguments);
 
   absl::StatusOr<HttpRequest> http_request = buildHttpRequest(http_rule, arguments);
   ASSERT_TRUE(http_request.ok());
 
-  EXPECT_THAT(http_request->url, StrEq("/v1/projects/123456789?boolean=true&float=123.456&"
-                                       "integer=123&null=null&string=test%20string"));
+  absl::string_view url = http_request->url;
+  size_t pos = url.find('?');
+  ASSERT_NE(pos, std::string::npos);
+  EXPECT_THAT(url.substr(0, pos), StrEq("/v1/projects/123456789"));
+  absl::string_view query_str = url.substr(pos + 1);
+  std::vector<std::string> params = absl::StrSplit(query_str, '&');
+  EXPECT_THAT(params, testing::UnorderedElementsAre("boolean=true", "float=123.456", "integer=123",
+                                                    "null=null", "string=test%20string"));
   EXPECT_THAT(http_request->method, StrEq("DELETE"));
-  EXPECT_TRUE(http_request->body.is_null());
+  EXPECT_TRUE(http_request->body.empty());
 }
 
 TEST(HttpRequestBuilderTest, NestedPathInPathTemplate) {
@@ -182,21 +206,24 @@ TEST(HttpRequestBuilderTest, NestedPathInPathTemplate) {
     get: "/v1/{parent=projects/*}/shelves/{shelf.name}"
     body: "*"
   )pb");
-  json arguments = json::parse(R"json({
+  std::string json_str = R"json({
     "shelf": {
       "name": "science-fiction",
       "editions": ["kindle", "hardback", "audobook"]
     },
     "parent": "projects/123456789",
     "theme": "Kids"
-  })json");
+  })json";
+
+  Protobuf::Value arguments;
+  TestUtility::loadFromJson(json_str, arguments);
 
   absl::StatusOr<HttpRequest> http_request = buildHttpRequest(http_rule, arguments);
   ASSERT_TRUE(http_request.ok());
 
   EXPECT_THAT(http_request->url, StrEq("/v1/projects/123456789/shelves/science-fiction"));
   EXPECT_THAT(http_request->method, StrEq("GET"));
-  EXPECT_EQ(http_request->body, json::parse(R"json({
+  EXPECT_EQ(json::parse(http_request->body), json::parse(R"json({
               "shelf": {
                 "editions": ["kindle", "hardback", "audobook"]
               },
@@ -209,9 +236,12 @@ TEST(HttpRequestBuilderTest, PathTemplateNotInArgumentsReturnError) {
       R"pb(
     get: "/v1/{parent=projects/*}"
   )pb");
-  json arguments = json::parse(R"json({
+  std::string json_str = R"json({
     "string": "test string"
-  })json");
+  })json";
+
+  Protobuf::Value arguments;
+  TestUtility::loadFromJson(json_str, arguments);
 
   EXPECT_THAT(buildHttpRequest(http_rule, arguments), StatusIs(absl::StatusCode::kInvalidArgument));
 }
@@ -222,18 +252,24 @@ TEST(HttpRequestBuilderTest, FailToExtractBodyReturnError) {
     get: "/v1"
     body: "foo"
   )pb");
-  json arguments = json::parse(R"json({})json");
+  std::string json_str = R"json({})json";
+
+  Protobuf::Value arguments;
+  TestUtility::loadFromJson(json_str, arguments);
 
   EXPECT_THAT(buildHttpRequest(http_rule, arguments), StatusIs(absl::StatusCode::kInvalidArgument));
 }
 
 TEST(HttpRequestBuilderTest, ConstructBaseUrlTest) {
-  json arguments = json::parse(R"json({
+  std::string json_str = R"json({
     "parent": "projects/123456789",
     "tableId": "table_A",
     "datasetId": "dataset_B",
     "projectId": "project_C"
-  })json");
+  })json";
+
+  Protobuf::Value arguments;
+  TestUtility::loadFromJson(json_str, arguments);
 
   // Single substitution.
   EXPECT_THAT(*constructBaseUrl("/v1/{parent=projects/*}", {"parent"}, arguments),

@@ -36,6 +36,7 @@ envoy_cc_test(
     name = "http_request_builder_test",
     srcs = ["http_request_builder_test.cc"],
     deps = [
+        "//source/common/protobuf",
         "//source/extensions/filters/http/mcp_json_rest_bridge:http_request_builder_lib",
         "//test/test_common:status_utility_lib",
         "@nlohmann_json//:json",
